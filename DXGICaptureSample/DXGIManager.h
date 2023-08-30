@@ -2,11 +2,15 @@
 
 #include <windows.h>
 #include <atlbase.h>
-#include <DXGITYPE.h>
-#include <DXGI1_2.h>
+#include <dxgitype.h>
+#include <dxgi1_2.h>
 #include <d3d11.h>
-#include <Wincodec.h>
+#include <wincodec.h>
 #include <vector>
+
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 using namespace std;
 
