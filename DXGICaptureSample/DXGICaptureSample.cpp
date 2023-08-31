@@ -10,11 +10,14 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	printf("DXGICaptureSample. Fast windows screen capture\n");
 	printf("Capturing desktop to: capture.bmp\n");
-	printf("Log: logfile.log\n");
 
 	CoInitialize(NULL);
 
-	g_DXGIManager.SetCaptureSource(CSDesktop);
+	g_DXGIManager.Init();
+
+	auto vAllOutputs = g_DXGIManager.GetAllOutputs();
+	printf("Found %d outputs\n", vAllOutputs.size());
+	g_DXGIManager.SetCaptureSource(0);
 
 	RECT rcDim;
 	g_DXGIManager.GetOutputRect(rcDim);

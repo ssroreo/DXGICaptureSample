@@ -1,8 +1,10 @@
 #include "stdafx.h"
 #include "DXGIManager.h"
 #include <gdiplus.h>
+#include <memory>
 
 using namespace Gdiplus;
+using namespace std;
 
 DXGIPointerInfo::DXGIPointerInfo(BYTE* pPointerShape, UINT uiPointerShapeBufSize, DXGI_OUTDUPL_FRAME_INFO fi, DXGI_OUTDUPL_POINTER_SHAPE_INFO psi)
 	: m_pPointerShape(pPointerShape),
@@ -66,7 +68,7 @@ HRESULT DXGIOutputDuplication::AcquireNextFrame(IDXGISurface1** pDXGISurface, DX
 	HRESULT hr = m_DXGIOutputDuplication->AcquireNextFrame(20, &fi, &spDXGIResource);
 	if (FAILED(hr))
 	{
-		__L_INFO("m_DXGIOutputDuplication->AcquireNextFrame failed with hr=0x%08x", hr);
+		printf("m_DXGIOutputDuplication->AcquireNextFrame failed with hr=0x%08x\n", hr);
 		return hr;
 	}
 
@@ -117,7 +119,7 @@ HRESULT DXGIOutputDuplication::AcquireNextFrame(IDXGISurface1** pDXGISurface, DX
 
 		if (hr == S_OK)
 		{
-			__L_INFO("PointerPosition Visible=%d x=%d y=%d w=%d h=%d type=%d\n", fi.PointerPosition.Visible, fi.PointerPosition.Position.x, fi.PointerPosition.Position.y, psi.Width, psi.Height, psi.Type);
+			printf("PointerPosition Visible=%d x=%d y=%d w=%d h=%d type=%d\n", fi.PointerPosition.Visible, fi.PointerPosition.Position.x, fi.PointerPosition.Position.y, psi.Width, psi.Height, psi.Type);
 
 			if ((psi.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME ||
 				psi.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR ||
@@ -177,11 +179,11 @@ bool DXGIOutputDuplication::IsPrimary()
 
 DXGIManager::DXGIManager()
 {
-	m_CaptureSource = CSUndefined;
 	SetRect(&m_rcCurrentOutput, 0, 0, 0, 0);
 	m_pBuf = NULL;
 	m_pDXGIPointer = NULL;
 	m_bInitialized = false;
+	m_uiCurrentOutput1 = 0;
 }
 
 DXGIManager::~DXGIManager()
@@ -201,15 +203,25 @@ DXGIManager::~DXGIManager()
 	}
 }
 
-HRESULT DXGIManager::SetCaptureSource(CaptureSource cs)
+HRESULT DXGIManager::SetCaptureSource(INT index)
 {
-	m_CaptureSource = cs;
+	if (m_vOutputs.size() >= index)
+		m_uiCurrentOutput1 = -1;
+
+	m_uiCurrentOutput1 = index;
 	return S_OK;
 }
 
-CaptureSource DXGIManager::GetCaptureSource()
+vector<DXGI_OUTPUT_DESC> DXGIManager::GetAllOutputs()
 {
-	return m_CaptureSource;
+	vector<DXGI_OUTPUT_DESC> vOutputs;
+	for (auto& it : m_vOutputs)
+	{
+		DXGI_OUTPUT_DESC desc;
+		it.GetDesc(desc);
+		vOutputs.push_back(desc);
+	}
+	return vOutputs;
 }
 
 HRESULT DXGIManager::Init()
@@ -223,7 +235,7 @@ HRESULT DXGIManager::Init()
 	HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)(&m_spDXGIFactory1));
 	if (FAILED(hr))
 	{
-		__L_ERROR("Failed to CreateDXGIFactory1 hr=%08x", hr);
+		printf("Failed to CreateDXGIFactory1 hr=%08x\n", hr);
 		return hr;
 	}
 
@@ -248,7 +260,7 @@ HRESULT DXGIManager::Init()
 			DXGI_OUTPUT_DESC outputDesc;
 			spDXGIOutput->GetDesc(&outputDesc);
 
-			__L_INFO("Display output found. DeviceName=%ls  AttachedToDesktop=%d Rotation=%d DesktopCoordinates={(%d,%d),(%d,%d)}",
+			printf("Display output found. DeviceName=%ls  AttachedToDesktop=%d Rotation=%d DesktopCoordinates={(%d,%d),(%d,%d)}\n",
 				outputDesc.DeviceName,
 				outputDesc.AttachedToDesktop,
 				outputDesc.Rotation,
@@ -275,7 +287,7 @@ HRESULT DXGIManager::Init()
 		hr = D3D11CreateDevice(AdapterIter, D3D_DRIVER_TYPE_UNKNOWN, NULL, 0, NULL, 0, D3D11_SDK_VERSION, &spD3D11Device, &fl, &spD3D11DeviceContext);
 		if (FAILED(hr))
 		{
-			__L_ERROR("Failed to create D3D11CreateDevice hr=%08x", hr);
+			printf("Failed to create D3D11CreateDevice hr=%08x\n", hr);
 			return hr;
 		}
 
@@ -284,14 +296,14 @@ HRESULT DXGIManager::Init()
 			CComQIPtr<IDXGIOutput1> spDXGIOutput1 = OutputIter;
 			if (!spDXGIOutput1)
 			{
-				__L_ERROR("spDXGIOutput1 is NULL");
+				printf("spDXGIOutput1 is NULL\n");
 				continue;
 			}
 
 			CComQIPtr<IDXGIDevice1> spDXGIDevice = spD3D11Device;
 			if (!spDXGIDevice)
 			{
-				__L_ERROR("spDXGIDevice is NULL");
+				printf("spDXGIDevice is NULL\n");
 				continue;
 			}
 
@@ -299,7 +311,7 @@ HRESULT DXGIManager::Init()
 			hr = spDXGIOutput1->DuplicateOutput(spDXGIDevice, &spDXGIOutputDuplication);
 			if (FAILED(hr))
 			{
-				__L_ERROR("Failed to duplicate output hr=%08x", hr);
+				printf("Failed to duplicate output hr=%08x\n", hr);
 				continue;
 			}
 
@@ -315,7 +327,7 @@ HRESULT DXGIManager::Init()
 	hr = m_spWICFactory.CoCreateInstance(CLSID_WICImagingFactory);
 	if (FAILED(hr))
 	{
-		__L_ERROR("Failed to create WICImagingFactory hr=%08x", hr);
+		printf("Failed to create WICImagingFactory hr=%08x\n", hr);
 		return hr;
 	}
 
@@ -328,10 +340,6 @@ HRESULT DXGIManager::GetOutputRect(RECT& rc)
 {
 	// Nulling rc just in case...
 	SetRect(&rc, 0, 0, 0, 0);
-
-	HRESULT hr = Init();
-	if (hr != S_OK)
-		return hr;
 
 	vector<DXGIOutputDuplication> vOutputs = GetOutputDuplication();
 
@@ -637,46 +645,12 @@ void DXGIManager::DrawMousePointer(BYTE* pDesktopBits, RECT rcDesktop, RECT rcDe
 vector<DXGIOutputDuplication> DXGIManager::GetOutputDuplication()
 {
 	vector<DXGIOutputDuplication> outputs;
-	switch (m_CaptureSource)
-	{
-	case CSMonitor1:
-	{
-		// Return the one with IsPrimary
-		for (auto& iter : m_vOutputs)
-		{
-			if (iter.IsPrimary())
-			{
-				outputs.push_back(iter);
-				break;
-			}
-		}
-	}
-	break;
 
-	case CSMonitor2:
-	{
-		// Return the first with !IsPrimary
-		for (auto& iter : m_vOutputs)
-		{
-			if (!iter.IsPrimary())
-			{
-				outputs.push_back(iter);
-				break;
-			}
-		}
-	}
-	break;
+	if(m_uiCurrentOutput1 < m_vOutputs.size())
+		outputs.push_back(m_vOutputs[m_uiCurrentOutput1]);
+	else
+		outputs = m_vOutputs;
 
-	case CSDesktop:
-	{
-		// Return all outputs
-		for (auto& iter : m_vOutputs)
-		{
-			outputs.push_back(iter);
-		}
-	}
-	break;
-	}
 	return outputs;
 }
 
